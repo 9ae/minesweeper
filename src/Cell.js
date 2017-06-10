@@ -3,9 +3,13 @@ import classNames from 'classnames';
 
 export class BoardCell {
 
-  constructor(isBomb){
-    this.isBomb = isBomb;
+  constructor(x, y){
+    this.x = x;
+    this.y = y
+    this.isBomb = false;
     this.count = 0;
+    this.view = null;
+    this.visited = false;
   }
 
   incrementCount() {
@@ -24,15 +28,29 @@ export class Cell extends Component {
 
     this.expose = this.expose.bind(this);
     this.flag = this.flag.bind(this);
+
+  }
+
+  componentDidMount(){
+    let evt = new CustomEvent('cellMounted',
+      {'detail': this});
+    window.dispatchEvent(evt);
   }
 
   componentWillUnmount() {
 
   }
 
+  isExposed(){
+    return !this.state.isHidden;
+  }
+
+  flip(){
+    this.setState(prevState => ({isHidden: false}));
+  }
+
   expose(e){
     console.log('expose');
-    this.setState(prevState => ({isHidden: false}));
     let exposeEvent = new CustomEvent('exposedCell', {'detail': this.props});
     window.dispatchEvent(exposeEvent);
 
@@ -43,11 +61,13 @@ export class Cell extends Component {
   flag(e){
     console.log('flag cell');
     this.setState({isFlagged: true});
+    let flagEvent = new CustomEvent('flagCell', {'detail': this.props});
+    window.dispatchEvent(flagEvent);
     e.preventDefault();
   }
 
   render() {
-    //{this.isHidden ? this.count : ' '}
+
     let content = ' ';
     if(this.state.isHidden){
       if(this.state.isFlagged){
@@ -61,6 +81,8 @@ export class Cell extends Component {
         content = this.props.count;
       }
     }
+
+    //let content = this.props.isBomb ? 'X' : this.props.count;
     let classes = classNames('Cell', {'exposed': !this.state.isHidden});
     return (
       <div className={classes} onClick={this.expose} onContextMenu={this.flag}>

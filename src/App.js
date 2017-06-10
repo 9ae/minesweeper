@@ -4,18 +4,6 @@ import './App.css';
 
 import {BoardCell, Cell} from './Cell';
 
-export function index2xy(dim){
-  return function(index){
-    return {y: Math.floor(index/dim), x: index%dim}
-  }
-}
-
-export function xy2index(dim){
-  return function(x, y){
-    return dim*y + x;
-  }
-}
-
 export const GAME_STATE_PLAY = 'playing';
 export const GAME_STATE_WIN = 'won';
 export const GAME_STATE_DIE = 'died';
@@ -29,25 +17,69 @@ class App extends Component {
       gameState: GAME_STATE_PLAY
     }
 
-    this.boardDim = 8;
-    this.xy = index2xy(this.boardDim);
-    this.index = xy2index(this.boardDim);
-
-    this.mines = this.createMines(10);
+    this.boardDim = 10;
+    this.minesTotal = 40;
     this.minesFlagged = 0;
-    this.board = this.createBoard(this.boardDim);
-    this.countMines();
+
+    this.board = this.createBoard();
+    this.addMines();
 
     this.handleExposedCell = this.handleExposedCell.bind(this);
     window.addEventListener('exposedCell', this.handleExposedCell , false);
+
+    this.handleFlagCell = this.handleFlagCell.bind(this);
+    window.addEventListener('flagCell', this.handleFlagCell, false);
+
+    this.handleCellMounted = this.handleCellMounted.bind(this);
+    window.addEventListener('cellMounted', this.handleCellMounted, false);
+  }
+
+  handleCellMounted(e){
+    let view = e.detail;
+    let p = view.props.coord;
+    this.board[p[0]][p[1]].view = view;
   }
 
   handleExposedCell(e){
     let isBomb = e.detail.isBomb;
+    let y = e.detail.coord[0], x = e.detail.coord[1];
     if(isBomb){
+      this.showAllMines();
       this.setState({gameState: GAME_STATE_DIE});
     } else {
+      this.expandExposure(x, y);
+    }
+  }
 
+  expandExposure(x, y){
+    let cell = this.board[y][x];
+    if(cell.isBomb){
+      return
+    }
+    else if (cell.visited){
+      return
+    }
+    else {
+      cell.visited = true;
+      cell.view.flip();
+      if(cell.count ==0){
+        let neighbors = this.getAdjacent(x, y);
+        neighbors.forEach((e) => {
+          this.expandExposure(e.x, e.y);
+        });
+      }
+    }
+
+  }
+
+  handleFlagCell(e){
+    let isBomb = e.detail.isBomb;
+    console.log(isBomb);
+    if(isBomb){
+      this.minesFlagged = this.minesFlagged + 1;
+      if(this.minesFlagged === this.minesTotal){
+        this.setState({gameState: GAME_STATE_WIN});
+      }
     }
   }
 
@@ -58,64 +90,88 @@ class App extends Component {
     else if(y>=this.boardDim || x>=this.boardDim){
       return null;
     } else {
-      let ind = this.index(x, y);
-      return this.board[ind];
+      return this.board[y][x];
     }
-  }
-
-  addCountToCell(x, y){
-    let cell = this.getCell(x, y);
-    if(cell != null){
-      cell.incrementCount();
-    }
-
   }
 
   createBoard(){
-    let boardSize = this.boardDim*this.boardDim;
-    console.log(this.mines);
     let board = [];
-    for(let n=0; n<boardSize; n++){
-      let cell = new BoardCell(this.mines.indexOf(n) >= 0);
-      board.push(cell)
+    for (let i=0; i<this.boardDim; i++){
+      let row = [];
+      for(let j=0; j<this.boardDim; j++){
+        let cell = new BoardCell(j, i);
+        row.push(cell)
+      }
+      board.push(row);
     }
+
     return board;
   }
 
-  createMines(total){
+  addMines(){
+    let mines = this.createMines();
+    for(let m =0; m<mines.length; m++){
+      let y = mines[m][0], x = mines[m][1];
+      let bombCell = this.board[y][x];
+      bombCell.isBomb = true;
+      let neighbors = this.getAdjacent(x, y);
+      neighbors.forEach((e)=>{
+        e.incrementCount();
+        return e;
+      });
+    }
+
+  }
+
+  createMines(){
     let mines = [];
     let boardSize = this.boardDim*this.boardDim;
-    while(mines.length < total){
+    while(mines.length < this.minesTotal){
       let ind = Math.floor(Math.random()*boardSize);
       if(mines.indexOf(ind) == -1){
         mines.push(ind);
       }
     }
-    //return mines.map((e) => [Math.floor(e/this.boardDim), e%this.boardDim]);
-    return mines;
+    return mines.map((e) => [Math.floor(e/this.boardDim), e%this.boardDim]);
   }
 
-  countMines(){
-    for(let m =0; m<this.mines.length; m++){
-      let bombIndex = this.mines[m];
-      let pos = this.xy(bombIndex);
-      //let bombCell = this.board[bombIndex];
-      this.addCountToCell(pos.x-1, pos.y-1);
-      this.addCountToCell(pos.x, pos.y-1);
-      this.addCountToCell(pos.x+1, pos.y-1);
-      this.addCountToCell(pos.x-1, pos.y);
-      this.addCountToCell(pos.x+1, pos.y);
-      this.addCountToCell(pos.x-1, pos.y+1);
-      this.addCountToCell(pos.x, pos.y+1);
-      this.addCountToCell(pos.x+1, pos.y+1);
+  showAllMines(){
+    for (let i=0; i<this.boardDim; i++){
+      for(let j=0; j<this.boardDim; j++){
+        let cell = this.board[i][j];
+        if(cell.isBomb){
+          cell.view.flip();
+        }
+      }
     }
   }
 
+  getAdjacent(x, y){
+    let cells = [];
+    cells.push(this.getCell(x-1, y-1));
+    cells.push(this.getCell(x, y-1));
+    cells.push(this.getCell(x+1, y-1));
+    cells.push(this.getCell(x-1, y));
+    cells.push(this.getCell(x+1, y));
+    cells.push(this.getCell(x-1, y+1));
+    cells.push(this.getCell(x, y+1));
+    cells.push(this.getCell(x+1, y+1));
+
+    return cells.filter((e) => e != null );
+  }
+
   render() {
-    var boardRenders = this.board.map((e, i) =>
-      <Cell key={i.toString()} isBomb={e.isBomb} count={e.count} coord={i} />);
+    var boardRenders = [];
+    for (let i=0; i<this.boardDim; i++){
+      for(let j=0; j<this.boardDim; j++){
+        let e = this.board[i][j];
+        let n = i * this.boardDim + j;
+        let cellView = (<Cell key={n.toString()} isBomb={e.isBomb} count={e.count} coord={[i, j]} />);
+        boardRenders.push(cellView);
+      }
+    }
     return (
-      <div>
+      <div className="App">
       <h1>Game State: {this.state.gameState}</h1>
       <div className="Board">
         {boardRenders}
